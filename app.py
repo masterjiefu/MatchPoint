@@ -40,7 +40,6 @@ if st.session_state.logged_in:
     # --- 1. EVENT MANAGEMENT ---
     st.header("Step 1: Create or Select an Event")
 
-    # Form to create a new event
     with st.expander("Create New Event"):
         with st.form("create_event_form"):
             event_name = st.text_input("New Event Name (e.g., 'CBC Sports Day 2025')")
@@ -48,12 +47,9 @@ if st.session_state.logged_in:
             create_event_button = st.form_submit_button("Create Event")
 
             if create_event_button:
-                if event_name and event_date:
+                if event_.name and event_date:
                     try:
-                        supabase.table("events").insert({
-                            "event_name": event_name,
-                            "event_date": str(event_date)
-                        }).execute()
+                        supabase.table("events").insert({ "event_name": event_name, "event_date": str(event_date) }).execute()
                         st.success(f"Event '{event_name}' created successfully!")
                     except Exception as e:
                         st.error(f"Error creating event: {e}")
@@ -62,7 +58,6 @@ if st.session_state.logged_in:
 
     st.divider()
 
-    # Dropdown to select an existing event
     try:
         events = supabase.table("events").select("id, event_name").execute().data
         event_names = {e['event_name']: e['id'] for e in events}
@@ -75,9 +70,8 @@ if st.session_state.logged_in:
             # --- 2. TOURNAMENT MANAGEMENT (within the selected event) ---
             st.header(f"Step 2: Add a Tournament to '{selected_event_name}'")
             
-            with st.form("create_tournament_form"):
+            with st.form("create_tournament_form", clear_on_submit=True):
                 tournament_name = st.text_input("Tournament Name (e.g., 'Men's Doubles Badminton')")
-                
                 col1, col2 = st.columns(2)
                 with col1:
                     sport = st.selectbox("Sport", ["Badminton", "Pickleball", "Captain Ball"])
@@ -97,22 +91,23 @@ if st.session_state.logged_in:
                                 num_brackets = 0
                             else:
                                 num_brackets = int(format_choice.split(" ")[0])
-
-                            new_tournament = {
-                                "event_id": selected_event_id, # Link to the selected event
-                                "name": tournament_name,
-                                "sport": sport,
-                                "match_type": match_type,
-                                "num_brackets": num_brackets
-                            }
-                            
+                            new_tournament = { "event_id": selected_event_id, "name": tournament_name, "sport": sport, "match_type": match_type, "num_brackets": num_brackets }
                             supabase.table("tournaments").insert(new_tournament).execute()
                             st.success(f"Tournament '{tournament_name}' added to event '{selected_event_name}'!")
-                            st.balloons()
                         except Exception as e:
                             st.error(f"An error occurred: {e}")
                     else:
                         st.warning("Please enter a tournament name.")
+            
+            st.divider()
+            
+            # --- NEW: DISPLAY REGISTERED TOURNAMENTS ---
+            st.subheader("Registered Tournaments for this Event")
+            tournaments_data = supabase.table("tournaments").select("*").eq("event_id", selected_event_id).execute().data
+            if tournaments_data:
+                st.dataframe(tournaments_data)
+            else:
+                st.write("No tournaments created for this event yet.")
 
     except Exception as e:
         st.error(f"An error occurred while fetching events: {e}")
