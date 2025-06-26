@@ -26,27 +26,49 @@ if 'logged_in' not in st.session_state:
 
 # --- MAIN APP LOGIC ---
 
-# If user is logged in, show the main app. Otherwise, show login/register page.
+# If user is logged in, show the main app dashboard.
 if st.session_state.logged_in:
-    st.success("You are logged in!")
-    st.header("Welcome to the Main App Dashboard!")
-    # Dashboard code will go here later
+    st.sidebar.success("You are logged in!")
     
     if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
         st.rerun()
 
+    # --- ADMIN DASHBOARD ---
+    st.title("Admin Dashboard")
+    # We will add the full dashboard back after this test
+    st.success("Login successful! The main dashboard will be built here.")
+
+
+# If user is not logged in, show the login/register page.
 else:
     st.title("Welcome to MatchPoint! 🏆")
     st.sidebar.header("Navigation")
     page = st.sidebar.radio("Go to", ["Login", "Register"])
 
     if page == "Login":
-        st.header("Login Page")
-        st.write("The login form should appear here. This proves the page navigation is working.")
-        # We will add the form back in the next step
+        st.header("Login")
+        # ADDING THE LOGIN FORM BACK
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            login_button = st.form_submit_button("Login")
+
+            if login_button:
+                try:
+                    user_session = supabase.auth.sign_in_with_password({
+                        "email": email,
+                        "password": password
+                    })
+                    if user_session.user:
+                        st.session_state.logged_in = True
+                        st.rerun() 
+                    else:
+                        st.error("Invalid login credentials.")
+                except Exception as e:
+                    st.error(f"An error occurred during login: {e}")
 
     elif page == "Register":
         st.header("Register Page")
         st.write("The registration form should appear here.")
-        # We will add the form back in the next step
+        # We will add the full registration form back in the next step
