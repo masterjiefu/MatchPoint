@@ -4,7 +4,7 @@ from supabase import create_client, Client
 import os
 
 # --- PAGE CONFIG ---
-st.set_page_config(
+st.set_page_config(st.write("Version 2")
     page_title="MatchPoint",
     page_icon="🏆",
     layout="centered"
