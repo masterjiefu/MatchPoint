@@ -36,51 +36,91 @@ if st.session_state.logged_in:
 
     # --- ADMIN DASHBOARD ---
     st.title("Admin Dashboard")
-    st.header("Create New Tournament")
 
-    # The indentation of all lines inside this 'with' block is very important
-    with st.form("create_tournament_form"):
-        tournament_name = st.text_input("Tournament Name")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            sport = st.selectbox("Sport", ["Badminton", "Pickleball", "Captain Ball"])
-            format_choice = st.selectbox("Format", ["Full Round Robin", "2 Brackets", "3 Brackets", "4 Brackets"])
-        with col2:
-            if sport == "Badminton" or sport == "Pickleball":
-                match_type = st.selectbox("Match Type", ["Mens Doubles", "Womens Doubles", "Mix Doubles"])
-            elif sport == "Captain Ball":
-                match_type = st.selectbox("Match Type", ["Standard"], disabled=True)
-        
-        create_button = st.form_submit_button("Create Tournament")
+    # --- 1. EVENT MANAGEMENT ---
+    st.header("Step 1: Create or Select an Event")
 
-        if create_button:
-            if tournament_name:
-                try:
-                    if format_choice == "Full Round Robin":
-                        num_brackets = 0
+    # Form to create a new event
+    with st.expander("Create New Event"):
+        with st.form("create_event_form"):
+            event_name = st.text_input("New Event Name (e.g., 'CBC Sports Day 2025')")
+            event_date = st.date_input("Event Date")
+            create_event_button = st.form_submit_button("Create Event")
+
+            if create_event_button:
+                if event_name and event_date:
+                    try:
+                        supabase.table("events").insert({
+                            "event_name": event_name,
+                            "event_date": str(event_date)
+                        }).execute()
+                        st.success(f"Event '{event_name}' created successfully!")
+                    except Exception as e:
+                        st.error(f"Error creating event: {e}")
+                else:
+                    st.warning("Please provide both an event name and a date.")
+
+    st.divider()
+
+    # Dropdown to select an existing event
+    try:
+        events = supabase.table("events").select("id, event_name").execute().data
+        event_names = {e['event_name']: e['id'] for e in events}
+        
+        selected_event_name = st.selectbox("Select an Event to Manage", event_names.keys())
+
+        if selected_event_name:
+            selected_event_id = event_names[selected_event_name]
+
+            # --- 2. TOURNAMENT MANAGEMENT (within the selected event) ---
+            st.header(f"Step 2: Add a Tournament to '{selected_event_name}'")
+            
+            with st.form("create_tournament_form"):
+                tournament_name = st.text_input("Tournament Name (e.g., 'Men's Doubles Badminton')")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    sport = st.selectbox("Sport", ["Badminton", "Pickleball", "Captain Ball"])
+                    format_choice = st.selectbox("Format", ["Full Round Robin", "2 Brackets", "3 Brackets", "4 Brackets"])
+                with col2:
+                    if sport == "Badminton" or sport == "Pickleball":
+                        match_type = st.selectbox("Match Type", ["Mens Doubles", "Womens Doubles", "Mix Doubles"])
+                    elif sport == "Captain Ball":
+                        match_type = st.selectbox("Match Type", ["Standard"], disabled=True)
+                
+                create_tournament_button = st.form_submit_button("Add Tournament to Event")
+
+                if create_tournament_button:
+                    if tournament_name:
+                        try:
+                            if format_choice == "Full Round Robin":
+                                num_brackets = 0
+                            else:
+                                num_brackets = int(format_choice.split(" ")[0])
+
+                            new_tournament = {
+                                "event_id": selected_event_id, # Link to the selected event
+                                "name": tournament_name,
+                                "sport": sport,
+                                "match_type": match_type,
+                                "num_brackets": num_brackets
+                            }
+                            
+                            supabase.table("tournaments").insert(new_tournament).execute()
+                            st.success(f"Tournament '{tournament_name}' added to event '{selected_event_name}'!")
+                            st.balloons()
+                        except Exception as e:
+                            st.error(f"An error occurred: {e}")
                     else:
-                        num_brackets = int(format_choice.split(" ")[0])
+                        st.warning("Please enter a tournament name.")
 
-                    new_tournament = {
-                        "name": tournament_name,
-                        "sport": sport,
-                        "match_type": match_type,
-                        "num_brackets": num_brackets
-                    }
-                    
-                    supabase.table("tournaments").insert(new_tournament).execute()
-                    
-                    st.success(f"Tournament '{tournament_name}' created successfully!")
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"An error occurred: {e}")
-            else:
-                st.warning("Please enter a tournament name.")
+    except Exception as e:
+        st.error(f"An error occurred while fetching events: {e}")
 
 
 # If user is not logged in, show the login/register page.
 else:
+    # ... (The login/register code is the same as before) ...
     st.title("Welcome to MatchPoint! 🏆")
     st.sidebar.header("Navigation")
     page = st.sidebar.radio("Go to", ["Login", "Register"])
