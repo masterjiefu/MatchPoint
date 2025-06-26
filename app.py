@@ -1,6 +1,21 @@
 import streamlit as st
+from supabase import create_client, Client
+import os
 
-st.title("Login Form Test")
+# --- DATABASE CONNECTION ---
+try:
+    supabase_url = st.secrets["SUPABASE_URL"]
+    supabase_key = st.secrets["SUPABASE_KEY"]
+    supabase: Client = create_client(supabase_url, supabase_key)
+    st.success("Successfully connected to Supabase! ✅")
+except Exception as e:
+    st.error("Failed to connect to Supabase. Check your secrets.")
+    st.error(f"Details: {e}")
+    st.stop()
+
+
+# --- SIMPLE FORM TEST ---
+st.title("Login Form Test (with DB Connection)")
 
 st.write("If you can see the form below, the test is working.")
 
