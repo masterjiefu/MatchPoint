@@ -2,27 +2,51 @@ import streamlit as st
 from supabase import create_client, Client
 import os
 
+# --- PAGE CONFIG ---
+st.set_page_config(
+    page_title="MatchPoint",
+    page_icon="🏆",
+    layout="wide" 
+)
+
 # --- DATABASE CONNECTION ---
 try:
     supabase_url = st.secrets["SUPABASE_URL"]
     supabase_key = st.secrets["SUPABASE_KEY"]
     supabase: Client = create_client(supabase_url, supabase_key)
-    st.success("Successfully connected to Supabase! ✅")
 except Exception as e:
-    st.error("Failed to connect to Supabase. Check your secrets.")
+    st.error("Error: Could not connect to the database. Please check your Supabase credentials in the app's secrets.")
     st.error(f"Details: {e}")
     st.stop()
 
 
-# --- SIMPLE FORM TEST ---
-st.title("Login Form Test (with DB Connection)")
+# --- Initialize Session State ---
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
 
-st.write("If you can see the form below, the test is working.")
+# --- MAIN APP LOGIC ---
 
-with st.form("login_form_test"):
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-    login_button = st.form_submit_button("Test Login Button")
+# If user is logged in, show the main app. Otherwise, show login/register page.
+if st.session_state.logged_in:
+    st.success("You are logged in!")
+    st.header("Welcome to the Main App Dashboard!")
+    # Dashboard code will go here later
+    
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
 
-if login_button:
-    st.success("The button was clicked successfully!")
+else:
+    st.title("Welcome to MatchPoint! 🏆")
+    st.sidebar.header("Navigation")
+    page = st.sidebar.radio("Go to", ["Login", "Register"])
+
+    if page == "Login":
+        st.header("Login Page")
+        st.write("The login form should appear here. This proves the page navigation is working.")
+        # We will add the form back in the next step
+
+    elif page == "Register":
+        st.header("Register Page")
+        st.write("The registration form should appear here.")
+        # We will add the form back in the next step
