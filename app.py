@@ -9,9 +9,6 @@ st.set_page_config(
     layout="centered"
 )
 
-# This is the new line for our test
-st.write("Version 2")
-
 # --- DATABASE CONNECTION ---
 try:
     supabase_url = st.secrets["SUPABASE_URL"]
@@ -22,54 +19,42 @@ except Exception as e:
     st.error(f"Details: {e}")
     st.stop()
 
+# --- Initialize Session State ---
+# This is the app's "memory". We'll use it to remember if the user is logged in.
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
 
-# --- USER INTERFACE ---
-st.title("Welcome to MatchPoint! 🏆")
-st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to", ["Login", "Register"])
+# --- MAIN APP LOGIC ---
 
-if page == "Login":
-    st.header("Login")
-    with st.form("login_form"):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        login_button = st.form_submit_button("Login")
+# If user is logged in, show the main app. Otherwise, show login/register page.
+if st.session_state.logged_in:
+    st.success("You are logged in!")
+    st.header("Welcome to the Main App Dashboard!")
+    st.write("All the tournament management features will go here.")
+    
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.experimental_rerun() # Rerun the script to show the login page again
 
-        if login_button:
-            st.info("Login logic coming soon!")
+else:
+    st.title("Welcome to MatchPoint! 🏆")
+    st.sidebar.header("Navigation")
+    page = st.sidebar.radio("Go to", ["Login", "Register"])
 
-elif page == "Register":
-    st.header("Create a New Account")
-    with st.form("register_form"):
-        full_name = st.text_input("Full Name (as per IC)")
-        email = st.text_input("Email")
-        phone_number = st.text_input("Phone Number")
-        password = st.text_input("Password", type="password")
-        register_button = st.form_submit_button("Register")
+    if page == "Login":
+        st.header("Login")
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            login_button = st.form_submit_button("Login")
 
-        # --- NEW REGISTRATION LOGIC ---
-        if register_button:
-            if password and email and full_name and phone_number:
+            # --- NEW LOGIN LOGIC ---
+            if login_button:
                 try:
-                    # Step 1: Create the user in Supabase Authentication
-                    user_session = supabase.auth.sign_up({
+                    user_session = supabase.auth.sign_in_with_password({
                         "email": email,
                         "password": password
                     })
-                    
-                    # Step 2: Update the user's profile in our 'profiles' table with the extra details
+                    # If login is successful, the 'user' object will be populated
                     if user_session.user:
-                        user_id = user_session.user.id
-                        supabase.table("profiles").update({
-                            "full_name": full_name,
-                            "phone_number": phone_number
-                        }).eq("id", user_id).execute()
-
-                        st.success("Registration successful! Please check your email to verify your account.")
-                    else:
-                         st.error("Registration failed after sign-up. Please try again.")
-
-                except Exception as e:
-                    st.error(f"An error occurred during registration: {e}")
-            else:
-                st.warning("Please fill out all fields.")
+                        st.session_state
