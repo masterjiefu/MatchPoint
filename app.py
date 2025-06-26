@@ -21,8 +21,17 @@ except Exception as e:
 
 
 # --- Initialize Session State ---
+# This is the app's "memory". We'll use it to remember the user's choices.
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
+if 'event_type_choice' not in st.session_state:
+    st.session_state.event_type_choice = None
+
+
+# --- A function to reset the view ---
+def reset_view():
+    st.session_state.event_type_choice = None
+
 
 # --- MAIN APP LOGIC ---
 
@@ -32,118 +41,44 @@ if st.session_state.logged_in:
     
     if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
+        # Reset all other session state variables on logout
+        for key in st.session_state.keys():
+            if key != 'logged_in':
+                del st.session_state[key]
         st.rerun()
 
     # --- ADMIN DASHBOARD ---
     st.title("Admin Dashboard")
 
-    # --- 1. EVENT MANAGEMENT ---
-    st.header("Step 1: Create or Select an Event")
+    # If an event type has been chosen, show a button to go back
+    if st.session_state.event_type_choice:
+        st.button("← Back to Event Type Selection", on_click=reset_view)
 
-    with st.expander("Create New Event"):
-        with st.form("create_event_form"):
-            event_name = st.text_input("New Event Name (e.g., 'CBC Sports Day 2025')")
-            event_date = st.date_input("Event Date")
-            create_event_button = st.form_submit_button("Create Event")
+    # Show the initial choice if no selection has been made yet
+    if not st.session_state.event_type_choice:
+        st.header("Step 1: Choose Your Event Type")
+        st.write("How would you like to set up your event?")
+        
+        col1, col2 = st.columns(2)
+        if col1.button("🚀 Create Standalone Event (Single Sport)", use_container_width=True, help="For a dedicated tournament focusing on just one sport, like a weekend badminton championship."):
+            st.session_state.event_type_choice = "Standalone"
+            st.rerun()
 
-            if create_event_button:
-                if event_name and event_date:
-                    try:
-                        supabase.table("events").insert({ "event_name": event_name, "event_date": str(event_date) }).execute()
-                        st.success(f"Event '{event_name}' created successfully!")
-                    except Exception as e:
-                        st.error(f"Error creating event: {e}")
-                else:
-                    st.warning("Please provide both an event name and a date.")
+        if col2.button("🎉 Create Festival Event (Multiple Sports)", use_container_width=True, help="For a large event with many different sports running at the same time, like a sports day."):
+            st.session_state.event_type_choice = "Festival"
+            st.rerun()
 
-    st.divider()
+    # Show the Standalone workflow if that was chosen
+    elif st.session_state.event_type_choice == "Standalone":
+        st.header("Standalone Event Setup")
+        st.info("The UI and logic for creating a Standalone (single sport) event will go here.")
+        st.success("You selected Standalone!")
 
-    try:
-        events = supabase.table("events").select("id, event_name").execute().data
-        if not events:
-            st.warning("No events found. Please create a new event to begin.")
-            st.stop()
-
-        event_names = {e['event_name']: e['id'] for e in events}
-        selected_event_name = st.selectbox("Select an Event to Manage", event_names.keys())
-
-        if selected_event_name:
-            selected_event_id = event_names[selected_event_name]
-
-            # --- 2. TOURNAMENT MANAGEMENT (within the selected event) ---
-            st.header(f"Step 2: Add Tournaments to '{selected_event_name}'")
-
-            # --- NEW "APPLY ALL" FEATURE ---
-            if st.button("Add All Standard Tournaments", type="primary"):
-                standard_tournaments = [
-                    {"name": "Men's Doubles Badminton", "sport": "Badminton", "match_type": "Mens Doubles"},
-                    {"name": "Women's Doubles Badminton", "sport": "Badminton", "match_type": "Womens Doubles"},
-                    {"name": "Mixed Doubles Badminton", "sport": "Badminton", "match_type": "Mix Doubles"},
-                    {"name": "Men's Doubles Pickleball", "sport": "Pickleball", "match_type": "Mens Doubles"},
-                    {"name": "Women's Doubles Pickleball", "sport": "Pickleball", "match_type": "Womens Doubles"},
-                    {"name": "Mixed Doubles Pickleball", "sport": "Pickleball", "match_type": "Mix Doubles"},
-                    {"name": "Captain Ball", "sport": "Captain Ball", "match_type": "Standard"}
-                ]
-                
-                tournaments_to_insert = []
-                for t in standard_tournaments:
-                    tournaments_to_insert.append({
-                        "event_id": selected_event_id,
-                        "name": t["name"],
-                        "sport": t["sport"],
-                        "match_type": t["match_type"],
-                        "num_brackets": 0 # Defaulting to Full Round Robin
-                    })
-                
-                try:
-                    supabase.table("tournaments").insert(tournaments_to_insert).execute()
-                    st.success("All standard tournaments have been added to the event!")
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"Error adding all tournaments: {e}")
-
-
-            with st.form("create_tournament_form", clear_on_submit=True):
-                st.write("Or, add a single tournament manually:")
-                tournament_name = st.text_input("Tournament Name (e.g., 'U-12 Badminton')")
-                col1, col2 = st.columns(2)
-                with col1:
-                    sport = st.selectbox("Sport", ["Badminton", "Pickleball", "Captain Ball"])
-                    format_choice = st.selectbox("Format", ["Full Round Robin", "2 Brackets", "3 Brackets", "4 Brackets"])
-                with col2:
-                    if sport == "Badminton" or sport == "Pickleball":
-                        match_type = st.selectbox("Match Type", ["Mens Doubles", "Womens Doubles", "Mix Doubles"])
-                    elif sport == "Captain Ball":
-                        match_type = st.selectbox("Match Type", ["Standard"], disabled=True)
-                
-                create_tournament_button = st.form_submit_button("Add Single Tournament to Event")
-
-                if create_tournament_button:
-                    if tournament_name:
-                        try:
-                            if format_choice == "Full Round Robin":
-                                num_brackets = 0
-                            else:
-                                num_brackets = int(format_choice.split(" ")[0])
-                            new_tournament = { "event_id": selected_event_id, "name": tournament_name, "sport": sport, "match_type": match_type, "num_brackets": num_brackets }
-                            supabase.table("tournaments").insert(new_tournament).execute()
-                            st.success(f"Tournament '{tournament_name}' added to event '{selected_event_name}'!")
-                        except Exception as e:
-                            st.error(f"An error occurred: {e}")
-                    else:
-                        st.warning("Please enter a tournament name.")
-            
-            st.divider()
-            
-            st.subheader("Registered Tournaments for this Event")
-            tournaments_data = supabase.table("tournaments").select("*").eq("event_id", selected_event_id).execute().data
-            if tournaments_data:
-                st.dataframe(tournaments_data)
-            else:
-                st.write("No tournaments created for this event yet.")
-
-    except Exception as e:
-        st.error(f"An error occurred while fetching events: {e}")
+    # Show the Festival workflow if that was chosen
+    elif st.session_state.event_type_choice == "Festival":
+        st.header("Festival Event Setup")
+        st.info("The UI and logic for creating a Festival (multi-sport) event, including the batch-creation tool, will go here.")
+        st.success("You selected Festival!")
 
 
 # If user is not logged in, show the login/register page.
