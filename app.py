@@ -54,3 +54,22 @@ elif page == "Register":
                     # Step 1: Create the user in Supabase Authentication
                     user_session = supabase.auth.sign_up({
                         "email": email,
+                        "password": password
+                    })
+                    
+                    # Step 2: Update the user's profile in our 'profiles' table with the extra details
+                    if user_session.user:
+                        user_id = user_session.user.id
+                        supabase.table("profiles").update({
+                            "full_name": full_name,
+                            "phone_number": phone_number
+                        }).eq("id", user_id).execute()
+
+                        st.success("Registration successful! Please check your email to verify your account.")
+                    else:
+                         st.error("Registration failed after sign-up. Please try again.")
+
+                except Exception as e:
+                    st.error(f"An error occurred during registration: {e}")
+            else:
+                st.warning("Please fill out all fields.")
