@@ -47,7 +47,7 @@ if st.session_state.logged_in:
             create_event_button = st.form_submit_button("Create Event")
 
             if create_event_button:
-                if event_.name and event_date:
+                if event_name and event_date:
                     try:
                         supabase.table("events").insert({ "event_name": event_name, "event_date": str(event_date) }).execute()
                         st.success(f"Event '{event_name}' created successfully!")
@@ -60,18 +60,52 @@ if st.session_state.logged_in:
 
     try:
         events = supabase.table("events").select("id, event_name").execute().data
+        if not events:
+            st.warning("No events found. Please create a new event to begin.")
+            st.stop()
+
         event_names = {e['event_name']: e['id'] for e in events}
-        
         selected_event_name = st.selectbox("Select an Event to Manage", event_names.keys())
 
         if selected_event_name:
             selected_event_id = event_names[selected_event_name]
 
             # --- 2. TOURNAMENT MANAGEMENT (within the selected event) ---
-            st.header(f"Step 2: Add a Tournament to '{selected_event_name}'")
-            
+            st.header(f"Step 2: Add Tournaments to '{selected_event_name}'")
+
+            # --- NEW "APPLY ALL" FEATURE ---
+            if st.button("Add All Standard Tournaments", type="primary"):
+                standard_tournaments = [
+                    {"name": "Men's Doubles Badminton", "sport": "Badminton", "match_type": "Mens Doubles"},
+                    {"name": "Women's Doubles Badminton", "sport": "Badminton", "match_type": "Womens Doubles"},
+                    {"name": "Mixed Doubles Badminton", "sport": "Badminton", "match_type": "Mix Doubles"},
+                    {"name": "Men's Doubles Pickleball", "sport": "Pickleball", "match_type": "Mens Doubles"},
+                    {"name": "Women's Doubles Pickleball", "sport": "Pickleball", "match_type": "Womens Doubles"},
+                    {"name": "Mixed Doubles Pickleball", "sport": "Pickleball", "match_type": "Mix Doubles"},
+                    {"name": "Captain Ball", "sport": "Captain Ball", "match_type": "Standard"}
+                ]
+                
+                tournaments_to_insert = []
+                for t in standard_tournaments:
+                    tournaments_to_insert.append({
+                        "event_id": selected_event_id,
+                        "name": t["name"],
+                        "sport": t["sport"],
+                        "match_type": t["match_type"],
+                        "num_brackets": 0 # Defaulting to Full Round Robin
+                    })
+                
+                try:
+                    supabase.table("tournaments").insert(tournaments_to_insert).execute()
+                    st.success("All standard tournaments have been added to the event!")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Error adding all tournaments: {e}")
+
+
             with st.form("create_tournament_form", clear_on_submit=True):
-                tournament_name = st.text_input("Tournament Name (e.g., 'Men's Doubles Badminton')")
+                st.write("Or, add a single tournament manually:")
+                tournament_name = st.text_input("Tournament Name (e.g., 'U-12 Badminton')")
                 col1, col2 = st.columns(2)
                 with col1:
                     sport = st.selectbox("Sport", ["Badminton", "Pickleball", "Captain Ball"])
@@ -82,7 +116,7 @@ if st.session_state.logged_in:
                     elif sport == "Captain Ball":
                         match_type = st.selectbox("Match Type", ["Standard"], disabled=True)
                 
-                create_tournament_button = st.form_submit_button("Add Tournament to Event")
+                create_tournament_button = st.form_submit_button("Add Single Tournament to Event")
 
                 if create_tournament_button:
                     if tournament_name:
@@ -101,7 +135,6 @@ if st.session_state.logged_in:
             
             st.divider()
             
-            # --- NEW: DISPLAY REGISTERED TOURNAMENTS ---
             st.subheader("Registered Tournaments for this Event")
             tournaments_data = supabase.table("tournaments").select("*").eq("event_id", selected_event_id).execute().data
             if tournaments_data:
