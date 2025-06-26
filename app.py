@@ -30,10 +30,9 @@ if 'logged_in' not in st.session_state:
 if st.session_state.logged_in:
     st.sidebar.success("You are logged in!")
     
-    # Corrected Logout Button Logic
     if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
-        st.rerun() # Use the new, correct function name
+        st.rerun()
 
     # --- ADMIN DASHBOARD ---
     st.title("Admin Dashboard")
@@ -45,14 +44,40 @@ if st.session_state.logged_in:
         col1, col2 = st.columns(2)
         with col1:
             sport = st.selectbox("Sport", ["Badminton", "Pickleball", "Captain Ball"])
-            num_brackets = st.selectbox("Format", ["Full Round Robin", "2 Brackets", "3 Brackets", "4 Brackets"])
+            format_choice = st.selectbox("Format", ["Full Round Robin", "2 Brackets", "3 Brackets", "4 Brackets"])
         with col2:
-            match_type = st.selectbox("Match Type", ["Mens Doubles", "Womens Doubles", "Mix Doubles", "Standard"])
+            # --- CORRECTED CONDITIONAL LOGIC FOR MATCH TYPE ---
+            if sport == "Badminton" or sport == "Pickleball":
+                match_type = st.selectbox("Match Type", ["Mens Doubles", "Womens Doubles", "Mix Doubles"])
+            elif sport == "Captain Ball":
+                match_type = st.selectbox("Match Type", ["Standard"], disabled=True)
         
         create_button = st.form_submit_button("Create Tournament")
 
         if create_button:
-            st.info("Tournament creation logic coming soon!")
+            if tournament_name:
+                try:
+                    if format_choice == "Full Round Robin":
+                        num_brackets = 0
+                    else:
+                        num_brackets = int(format_choice.split(" ")[0])
+
+                    new_tournament = {
+                        "name": tournament_name,
+                        "sport": sport,
+                        "match_type": match_type,
+                        "num_brackets": num_brackets
+                    }
+                    
+                    supabase.table("tournaments").insert(new_tournament).execute()
+                    
+                    st.success(f"Tournament '{tournament_name}' created successfully!")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"An error occurred: {e}")
+            else:
+                st.warning("Please enter a tournament name.")
+
 
 # If user is not logged in, show the login/register page.
 else:
@@ -75,7 +100,7 @@ else:
                     })
                     if user_session.user:
                         st.session_state.logged_in = True
-                        st.rerun() # Use the new, correct function name
+                        st.rerun()
                     else:
                         st.error("Invalid login credentials.")
                 except Exception as e:
