@@ -35,8 +35,8 @@ if st.session_state.logged_in:
         st.rerun()
 
     # --- ADMIN DASHBOARD ---
+    # This is the code that will be restored in a later step
     st.title("Admin Dashboard")
-    # We will add the full dashboard back after this test
     st.success("Login successful! The main dashboard will be built here.")
 
 
@@ -48,7 +48,6 @@ else:
 
     if page == "Login":
         st.header("Login")
-        # ADDING THE LOGIN FORM BACK
         with st.form("login_form"):
             email = st.text_input("Email")
             password = st.text_input("Password", type="password")
@@ -69,6 +68,32 @@ else:
                     st.error(f"An error occurred during login: {e}")
 
     elif page == "Register":
-        st.header("Register Page")
-        st.write("The registration form should appear here.")
-        # We will add the full registration form back in the next step
+        st.header("Create a New Account")
+        # ADDING THE REGISTRATION FORM BACK
+        with st.form("register_form"):
+            full_name = st.text_input("Full Name (as per IC)")
+            email = st.text_input("Email")
+            phone_number = st.text_input("Phone Number")
+            password = st.text_input("Password", type="password")
+            register_button = st.form_submit_button("Register")
+            
+            if register_button:
+                if password and email and full_name and phone_number:
+                    try:
+                        user_session = supabase.auth.sign_up({
+                            "email": email,
+                            "password": password
+                        })
+                        if user_session.user:
+                            user_id = user_session.user.id
+                            supabase.table("profiles").update({
+                                "full_name": full_name,
+                                "phone_number": phone_number
+                            }).eq("id", user_id).execute()
+                            st.success("Registration successful! Please check your email to verify your account.")
+                        else:
+                            st.error("Registration failed after sign-up. Please try again.")
+                    except Exception as e:
+                        st.error(f"An error occurred during registration: {e}")
+                else:
+                    st.warning("Please fill out all fields.")
