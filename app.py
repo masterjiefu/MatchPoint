@@ -6,11 +6,8 @@ import os
 st.set_page_config(
     page_title="MatchPoint",
     page_icon="🏆",
-    layout="centered"
+    layout="wide" 
 )
-
-# This is the new line for our test
-st.write("Version 2")
 
 # --- DATABASE CONNECTION ---
 try:
@@ -24,22 +21,40 @@ except Exception as e:
 
 
 # --- Initialize Session State ---
-# This is the app's "memory". We'll use it to remember if the user is logged in.
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
 # --- MAIN APP LOGIC ---
 
-# If user is logged in, show the main app. Otherwise, show login/register page.
+# If user is logged in, show the main app dashboard.
 if st.session_state.logged_in:
-    st.success("You are logged in!")
-    st.header("Welcome to the Main App Dashboard!")
-    st.write("All the tournament management features will go here.")
+    st.sidebar.success("You are logged in!")
     
-    if st.button("Logout"):
+    # Corrected Logout Button Logic
+    if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
-        st.experimental_rerun() # Rerun the script to show the login page again
+        st.rerun() # Use the new, correct function name
 
+    # --- ADMIN DASHBOARD ---
+    st.title("Admin Dashboard")
+    st.header("Create New Tournament")
+
+    with st.form("create_tournament_form"):
+        tournament_name = st.text_input("Tournament Name")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            sport = st.selectbox("Sport", ["Badminton", "Pickleball", "Captain Ball"])
+            num_brackets = st.selectbox("Format", ["Full Round Robin", "2 Brackets", "3 Brackets", "4 Brackets"])
+        with col2:
+            match_type = st.selectbox("Match Type", ["Mens Doubles", "Womens Doubles", "Mix Doubles", "Standard"])
+        
+        create_button = st.form_submit_button("Create Tournament")
+
+        if create_button:
+            st.info("Tournament creation logic coming soon!")
+
+# If user is not logged in, show the login/register page.
 else:
     st.title("Welcome to MatchPoint! 🏆")
     st.sidebar.header("Navigation")
@@ -52,17 +67,15 @@ else:
             password = st.text_input("Password", type="password")
             login_button = st.form_submit_button("Login")
 
-            # --- NEW LOGIN LOGIC ---
             if login_button:
                 try:
                     user_session = supabase.auth.sign_in_with_password({
                         "email": email,
                         "password": password
                     })
-                    # If login is successful, the 'user' object will be populated
                     if user_session.user:
                         st.session_state.logged_in = True
-                        st.experimental_rerun() # Rerun the script to show the main app
+                        st.rerun() # Use the new, correct function name
                     else:
                         st.error("Invalid login credentials.")
                 except Exception as e:
