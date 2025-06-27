@@ -2,6 +2,7 @@ import streamlit as st
 from supabase import create_client, Client
 import os
 import pandas as pd
+import numpy as np # We need numpy for a small trick
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Team Registration", page_icon="👥", layout="wide")
@@ -42,9 +43,8 @@ try:
             st.info("This event has no tournaments. Please add tournaments in the Admin Dashboard.")
             st.stop()
         
-        # --- NEW: Format the tournament names to include the sport for display ---
-        tournament_display_names = {f"{t['name']} ({t['sport']})": {"id": t['id'], "sport": t['sport']} for t in tournaments}
-        selected_tournament_display_name = st.selectbox("Next, select a Tournament to register teams for:", tournament_display_names.keys())
+        tournament_names = {f"{t['name']} ({t['sport']})": {"id": t['id'], "sport": t['sport']} for t in tournaments}
+        selected_tournament_display_name = st.selectbox("Next, select a Tournament to register teams for:", tournament_names.keys())
         
         if selected_tournament_display_name:
             selected_tournament_info = tournament_display_names[selected_tournament_display_name]
@@ -53,31 +53,42 @@ try:
 
             st.divider()
 
-            # Step 3: Register new teams using a conditional form based on the sport
-            st.header(f"Register New Teams for '{selected_tournament_display_name}'") # Use the full display name
+            # Step 3: Register new teams using the new table format
+            st.header(f"Register New Teams for '{selected_tournament_display_name}'")
             st.write("Use the table below to add multiple teams at once. Add new rows using the `+` button at the bottom.")
 
-            # Conditional UI LOGIC
+            # --- NEW LOGIC FOR NUMBERED COLUMN ---
             if selected_tournament_sport == "Captain Ball":
-                initial_teams = pd.DataFrame([ {"Team Name": ""} ])
-                edited_teams = st.data_editor(
-                    initial_teams, num_rows="dynamic", key=f"team_editor_cb_{selected_tournament_id}"
-                )
+                df_structure = {"Team Name": [""]}
             else:
-                initial_teams = pd.DataFrame([
-                    {"Team Name": "", "Player 1 Name": "", "Player 2 Name": "", "Reserve Man 1": "", "Reserve Man 2": "", "Reserve Woman 1": ""},
-                ])
-                edited_teams = st.data_editor(
-                    initial_teams, num_rows="dynamic", key=f"team_editor_full_{selected_tournament_id}"
-                )
+                df_structure = {"Team Name": [""], "Player 1 Name": [""], "Player 2 Name": [""], "Reserve Man 1": [""], "Reserve Man 2": [""], "Reserve Woman 1": [""]}
 
+            # We use a session state variable to store the table's data
+            if f"teams_df_{selected_tournament_id}" not in st.session_state:
+                st.session_state[f"teams_df_{selected_tournament_id}"] = pd.DataFrame(df_structure)
+            
+            # Create a copy for editing that includes the row number
+            df_for_editing = st.session_state[f"teams_df_{selected_tournament_id}"].copy()
+            df_for_editing.insert(0, 'No.', range(1, len(df_for_editing) + 1))
+
+
+            edited_df = st.data_editor(
+                df_for_editing,
+                num_rows="dynamic",
+                key=f"team_editor_{selected_tournament_id}",
+                disabled=["No."] # Make the 'No.' column read-only
+            )
+            
             if st.button("Register All Teams from Table"):
+                # When saving, we drop the display-only 'No.' column
+                teams_to_save = edited_df.drop(columns=['No.']).replace({np.nan: None})
+
                 teams_to_insert = []
-                for index, row in edited_teams.iterrows():
+                for index, row in teams_to_save.iterrows():
                     if row["Team Name"]:
                         if selected_tournament_sport == "Captain Ball":
                             teams_to_insert.append({ "tournament_id": selected_tournament_id, "team_name": row["Team Name"] })
-                        elif row["Player 1 Name"] and row["Player 2 Name"]:
+                        elif "Player 1 Name" in row and "Player 2 Name" in row and row["Player 1 Name"] and row["Player 2 Name"]:
                             teams_to_insert.append({
                                 "tournament_id": selected_tournament_id, "team_name": row["Team Name"],
                                 "player1_name": row["Player 1 Name"], "player2_name": row["Player 2 Name"],
@@ -90,19 +101,23 @@ try:
                         supabase.table("teams").insert(teams_to_insert).execute()
                         st.success(f"Successfully registered {len(teams_to_insert)} new team(s) for '{selected_tournament_display_name}'!")
                         st.balloons()
-                        st.rerun() # Rerun to update the registered teams list immediately
+                        # Clear the editor for next batch
+                        st.session_state[f"teams_df_{selected_tournament_id}"] = pd.DataFrame(df_structure)
+                        st.rerun() 
                     except Exception as e:
                         st.error(f"Error registering teams: {e}")
                 else:
                     st.warning("No complete teams were entered in the table. Please make sure all required fields are filled.")
-            
+
             st.divider()
 
-            # Step 4: Display already registered teams
             st.header("Registered Teams for this Tournament")
             teams_data = supabase.table("teams").select("*").eq("tournament_id", selected_tournament_id).execute().data
             if teams_data:
-                st.dataframe(teams_data)
+                # Add numbering to the display dataframe as well
+                display_df = pd.DataFrame(teams_data)
+                display_df.insert(0, 'No.', range(1, len(display_df) + 1))
+                st.dataframe(display_df)
             else:
                 st.write("No teams registered for this tournament yet.")
 
