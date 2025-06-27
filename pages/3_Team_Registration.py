@@ -41,47 +41,56 @@ try:
         if not tournaments:
             st.info("This event has no tournaments. Please add tournaments in the Admin Dashboard.")
             st.stop()
-
+        
         tournament_names = {t['name']: t['id'] for t in tournaments}
         selected_tournament_name = st.selectbox("Next, select a Tournament to register teams for:", tournament_names.keys())
-
+        
         if selected_tournament_name:
             selected_tournament_id = tournament_names[selected_tournament_name]
 
             st.divider()
 
-            # Step 3: Register a new team for the selected tournament
-            st.header(f"Register a New Team for '{selected_tournament_name}'")
-            with st.form("add_team_form", clear_on_submit=True):
-                team_name = st.text_input("Team Name")
-                player1_name = st.text_input("Player 1 Name")
-                player2_name = st.text_input("Player 2 Name")
-                st.markdown("---")
-                reserve_man_1_name = st.text_input("Reserve Man 1")
-                reserve_man_2_name = st.text_input("Reserve Man 2")
-                reserve_woman_1_name = st.text_input("Reserve Woman 1")
+            # Step 3: Register new teams using the new table format
+            st.header(f"Register New Teams for '{selected_tournament_name}'")
+            st.write("Use the table below to add multiple teams at once. Add new rows using the `+` button at the bottom.")
 
-                add_team_button = st.form_submit_button("Add Team to Tournament")
+            # Create an initial structure for the editable table
+            initial_teams = pd.DataFrame([
+                {"Team Name": "", "Player 1 Name": "", "Player 2 Name": "", "Reserve Man 1": "", "Reserve Man 2": "", "Reserve Woman 1": ""},
+            ])
 
-                if add_team_button:
-                    if team_name and player1_name and player2_name:
-                        new_team = {
+            # Use st.data_editor for bulk entry
+            edited_teams = st.data_editor(
+                initial_teams,
+                num_rows="dynamic",
+                key=f"team_editor_{selected_tournament_id}" # A unique key to prevent state issues
+            )
+
+            if st.button("Register All Teams from Table"):
+                teams_to_insert = []
+                for index, row in edited_teams.iterrows():
+                    # Skip empty rows
+                    if row["Team Name"] and row["Player 1 Name"] and row["Player 2 Name"]:
+                        teams_to_insert.append({
                             "tournament_id": selected_tournament_id,
-                            "team_name": team_name,
-                            "player1_name": player1_name,
-                            "player2_name": player2_name,
-                            "reserve_man_1_name": reserve_man_1_name,
-                            "reserve_man_2_name": reserve_man_2_name,
-                            "reserve_woman_1_name": reserve_woman_1_name
-                        }
-                        try:
-                            supabase.table("teams").insert(new_team).execute()
-                            st.success(f"Team '{team_name}' added to '{selected_tournament_name}'!")
-                        except Exception as e:
-                            st.error(f"Error adding team: {e}")
-                    else:
-                        st.warning("Please fill in at least the Team Name and the two main players.")
+                            "team_name": row["Team Name"],
+                            "player1_name": row["Player 1 Name"],
+                            "player2_name": row["Player 2 Name"],
+                            "reserve_man_1_name": row["Reserve Man 1"],
+                            "reserve_man_2_name": row["Reserve Man 2"],
+                            "reserve_woman_1_name": row["Reserve Woman 1"]
+                        })
 
+                if teams_to_insert:
+                    try:
+                        supabase.table("teams").insert(teams_to_insert).execute()
+                        st.success(f"Successfully registered {len(teams_to_insert)} new team(s) for '{selected_tournament_name}'!")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Error registering teams: {e}")
+                else:
+                    st.warning("No complete teams were entered in the table. Please fill in at least Team Name, Player 1, and Player 2 for each row.")
+            
             st.divider()
 
             # Step 4: Display already registered teams
