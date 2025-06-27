@@ -37,49 +37,58 @@ try:
         selected_event_id = event_names[selected_event_name]
 
         # Step 2: Select a Tournament from the chosen event
-        tournaments = supabase.table("tournaments").select("id, name").eq("event_id", selected_event_id).execute().data
+        tournaments = supabase.table("tournaments").select("id, name, sport").eq("event_id", selected_event_id).execute().data
         if not tournaments:
             st.info("This event has no tournaments. Please add tournaments in the Admin Dashboard.")
             st.stop()
         
-        tournament_names = {t['name']: t['id'] for t in tournaments}
+        tournament_names = {t['name']: {"id": t['id'], "sport": t['sport']} for t in tournaments}
         selected_tournament_name = st.selectbox("Next, select a Tournament to register teams for:", tournament_names.keys())
         
         if selected_tournament_name:
-            selected_tournament_id = tournament_names[selected_tournament_name]
+            selected_tournament_info = tournament_names[selected_tournament_name]
+            selected_tournament_id = selected_tournament_info["id"]
+            selected_tournament_sport = selected_tournament_info["sport"]
 
             st.divider()
 
-            # Step 3: Register new teams using the new table format
+            # Step 3: Register new teams using a conditional form based on the sport
             st.header(f"Register New Teams for '{selected_tournament_name}'")
             st.write("Use the table below to add multiple teams at once. Add new rows using the `+` button at the bottom.")
 
-            # Create an initial structure for the editable table
-            initial_teams = pd.DataFrame([
-                {"Team Name": "", "Player 1 Name": "", "Player 2 Name": "", "Reserve Man 1": "", "Reserve Man 2": "", "Reserve Woman 1": ""},
-            ])
-
-            # Use st.data_editor for bulk entry
-            edited_teams = st.data_editor(
-                initial_teams,
-                num_rows="dynamic",
-                key=f"team_editor_{selected_tournament_id}" # A unique key to prevent state issues
-            )
+            # --- NEW CONDITIONAL UI LOGIC ---
+            
+            # If the sport is Captain Ball, show a simpler table
+            if selected_tournament_sport == "Captain Ball":
+                initial_teams = pd.DataFrame([ {"Team Name": ""} ])
+                edited_teams = st.data_editor(
+                    initial_teams, num_rows="dynamic", key=f"team_editor_cb_{selected_tournament_id}"
+                )
+            # Otherwise, show the full table
+            else:
+                initial_teams = pd.DataFrame([
+                    {"Team Name": "", "Player 1 Name": "", "Player 2 Name": "", "Reserve Man 1": "", "Reserve Man 2": "", "Reserve Woman 1": ""},
+                ])
+                edited_teams = st.data_editor(
+                    initial_teams, num_rows="dynamic", key=f"team_editor_full_{selected_tournament_id}"
+                )
 
             if st.button("Register All Teams from Table"):
                 teams_to_insert = []
                 for index, row in edited_teams.iterrows():
-                    # Skip empty rows
-                    if row["Team Name"] and row["Player 1 Name"] and row["Player 2 Name"]:
-                        teams_to_insert.append({
-                            "tournament_id": selected_tournament_id,
-                            "team_name": row["Team Name"],
-                            "player1_name": row["Player 1 Name"],
-                            "player2_name": row["Player 2 Name"],
-                            "reserve_man_1_name": row["Reserve Man 1"],
-                            "reserve_man_2_name": row["Reserve Man 2"],
-                            "reserve_woman_1_name": row["Reserve Woman 1"]
-                        })
+                    # Always require a team name
+                    if row["Team Name"]:
+                        # Logic for Captain Ball (only team name)
+                        if selected_tournament_sport == "Captain Ball":
+                            teams_to_insert.append({ "tournament_id": selected_tournament_id, "team_name": row["Team Name"] })
+                        # Logic for other sports (requires players)
+                        elif row["Player 1 Name"] and row["Player 2 Name"]:
+                            teams_to_insert.append({
+                                "tournament_id": selected_tournament_id, "team_name": row["Team Name"],
+                                "player1_name": row["Player 1 Name"], "player2_name": row["Player 2 Name"],
+                                "reserve_man_1_name": row["Reserve Man 1"], "reserve_man_2_name": row["Reserve Man 2"],
+                                "reserve_woman_1_name": row["Reserve Woman 1"]
+                            })
 
                 if teams_to_insert:
                     try:
@@ -89,7 +98,7 @@ try:
                     except Exception as e:
                         st.error(f"Error registering teams: {e}")
                 else:
-                    st.warning("No complete teams were entered in the table. Please fill in at least Team Name, Player 1, and Player 2 for each row.")
+                    st.warning("No complete teams were entered in the table. Please make sure all required fields are filled.")
             
             st.divider()
 
