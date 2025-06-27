@@ -43,6 +43,11 @@ try:
         if not tournaments:
             st.info("This event has no tournaments yet. Add them from the Admin Dashboard.")
         else:
+            # Fetch all teams for all tournaments in this event just once for efficiency
+            all_tournament_ids = [t['id'] for t in tournaments]
+            all_team_data = supabase.table("teams").select("id, team_name").in_("tournament_id", all_tournament_ids).execute().data
+            team_map = {team['id']: team['team_name'] for team in all_team_data}
+
             for t in tournaments:
                 tournament_id = t['id']
                 tournament_status = t['status']
@@ -72,7 +77,7 @@ try:
                             if existing_matches:
                                 st.warning("Matches have already been generated for this tournament.")
                             else:
-                                teams = supabase.table("teams").select("id").eq("tournament_id", tournament_id).execute().data
+                                teams = [team for team in all_team_data if team['id'] in supabase.table("teams").select("id").eq("tournament_id", tournament_id).execute().data]
                                 team_ids = [team['id'] for team in teams]
 
                                 if len(team_ids) < 2:
@@ -90,16 +95,27 @@ try:
                                     st.success(f"Successfully generated {len(matches_to_insert)} matches!")
                                     st.rerun()
 
-                    # --- NEW: DISPLAY MATCH SCHEDULE ---
-                    if tournament_status == 'In Progress':
+                    # --- UPDATED: DISPLAY MATCH SCHEDULE WITH TEAM NAMES ---
+                    if tournament_status == 'In Progress' or tournament_status == 'Completed':
                         st.markdown("---")
                         st.write("**Match Schedule:**")
                         match_data = supabase.table("matches").select("*").eq("tournament_id", tournament_id).execute().data
                         if match_data:
-                            # For now, we display the raw data with IDs. We will make this prettier later.
-                            st.dataframe(match_data)
+                            schedule_df_data = []
+                            for match in match_data:
+                                team_a_name = team_map.get(match['team_a_id'], f"ID: {match['team_a_id']}")
+                                team_b_name = team_map.get(match['team_b_id'], f"ID: {match['team_b_id']}")
+                                schedule_df_data.append({
+                                    "Match ID": match['id'],
+                                    "Team A": team_a_name,
+                                    "Team B": team_b_name,
+                                    "Status": match['status']
+                                })
+                            
+                            schedule_df = pd.DataFrame(schedule_df_data)
+                            st.dataframe(schedule_df, hide_index=True)
                         else:
-                            st.write("No matches found.")
+                            st.write("No matches generated for this tournament yet.")
 
 except Exception as e:
     st.error(f"An error occurred: {e}")
