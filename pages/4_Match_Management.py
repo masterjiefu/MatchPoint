@@ -2,7 +2,7 @@ import streamlit as st
 from supabase import create_client, Client
 import os
 import pandas as pd
-import itertools # We need this library for the round-robin calculation
+import itertools
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Match Management", page_icon="⚔️", layout="wide")
@@ -68,36 +68,38 @@ try:
                     with col3:
                         is_disabled = (tournament_status != 'Locked')
                         if st.button("Generate Matches", key=f"gen_{tournament_id}", disabled=is_disabled):
-                            # --- NEW MATCH GENERATION LOGIC ---
-                            # First, check if matches already exist to prevent duplicates
                             existing_matches = supabase.table("matches").select("id").eq("tournament_id", tournament_id).execute().data
                             if existing_matches:
                                 st.warning("Matches have already been generated for this tournament.")
                             else:
-                                # Fetch all teams for this tournament
                                 teams = supabase.table("teams").select("id").eq("tournament_id", tournament_id).execute().data
                                 team_ids = [team['id'] for team in teams]
 
                                 if len(team_ids) < 2:
                                     st.error("Cannot generate matches. At least 2 teams must be registered.")
                                 else:
-                                    # Generate all unique pairs of teams (round-robin)
                                     match_pairs = list(itertools.combinations(team_ids, 2))
                                     matches_to_insert = []
                                     for pair in match_pairs:
                                         matches_to_insert.append({
-                                            "tournament_id": tournament_id,
-                                            "team_a_id": pair[0],
-                                            "team_b_id": pair[1],
-                                            "round": "Round Robin" # Default round name
+                                            "tournament_id": tournament_id, "team_a_id": pair[0],
+                                            "team_b_id": pair[1], "round": "Round Robin"
                                         })
-                                    
-                                    # Insert all generated matches into the database
                                     supabase.table("matches").insert(matches_to_insert).execute()
-                                    # Update tournament status
                                     supabase.table("tournaments").update({"status": "In Progress"}).eq("id", tournament_id).execute()
                                     st.success(f"Successfully generated {len(matches_to_insert)} matches!")
                                     st.rerun()
+
+                    # --- NEW: DISPLAY MATCH SCHEDULE ---
+                    if tournament_status == 'In Progress':
+                        st.markdown("---")
+                        st.write("**Match Schedule:**")
+                        match_data = supabase.table("matches").select("*").eq("tournament_id", tournament_id).execute().data
+                        if match_data:
+                            # For now, we display the raw data with IDs. We will make this prettier later.
+                            st.dataframe(match_data)
+                        else:
+                            st.write("No matches found.")
 
 except Exception as e:
     st.error(f"An error occurred: {e}")
