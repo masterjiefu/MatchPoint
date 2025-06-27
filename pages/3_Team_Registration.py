@@ -74,23 +74,27 @@ try:
                     st.session_state[editor_key], num_rows="dynamic", hide_index=True, key=f"editor_full_{selected_tournament_id}"
                 )
 
-
             if st.button("Register All Teams from Table"):
                 st.session_state[editor_key] = edited_teams
                 teams_to_insert = []
 
                 for index, row in st.session_state[editor_key].iterrows():
                     if row["Team Name"]:
-                        if selected_tournament_sport == "Captain Ball":
-                            teams_to_insert.append({ "tournament_id": selected_tournament_id, "team_name": row["Team Name"] })
-                        elif "Player 1 Name" in row and "Player 2 Name" in row and row["Player 1 Name"] and row["Player 2 Name"]:
-                            teams_to_insert.append({
-                                "tournament_id": selected_tournament_id, "team_name": row["Team Name"],
-                                "player1_name": row["Player 1 Name"], "player2_name": row["Player 2 Name"],
-                                "reserve_man_1_name": row["Reserve Man 1"], "reserve_man_2_name": row["Reserve Man 2"],
-                                "reserve_woman_1_name": row["Reserve Woman 1"]
-                            })
-
+                        team_data = {
+                            "tournament_id": selected_tournament_id,
+                            "team_name": row["Team Name"]
+                        }
+                        if selected_tournament_sport != "Captain Ball":
+                            if "Player 1 Name" in row and "Player 2 Name" in row and row["Player 1 Name"] and row["Player 2 Name"]:
+                                team_data.update({
+                                    "player1_name": row["Player 1 Name"], "player2_name": row["Player 2 Name"],
+                                    "reserve_man_1_name": row["Reserve Man 1"], "reserve_man_2_name": row["Reserve Man 2"],
+                                    "reserve_woman_1_name": row["Reserve Woman 1"]
+                                })
+                                teams_to_insert.append(team_data)
+                        else:
+                            teams_to_insert.append(team_data)
+                
                 if teams_to_insert:
                     try:
                         supabase.table("teams").insert(teams_to_insert).execute()
@@ -110,9 +114,17 @@ try:
             teams_data = supabase.table("teams").select("*").eq("tournament_id", selected_tournament_id).execute().data
             if teams_data:
                 display_df = pd.DataFrame(teams_data)
-                display_df.insert(0, 'No.', range(1, len(display_df) + 1))
+                
                 # --- THIS IS THE FIX ---
-                st.dataframe(display_df, hide_index=True) # Hide the default 0-based index
+                # Define which columns we actually want to show to the user
+                columns_to_show = ['team_name', 'player1_name', 'player2_name', 'reserve_man_1_name', 'reserve_man_2_name', 'reserve_woman_1_name']
+                # Filter the dataframe to only include columns that exist
+                existing_columns_to_show = [col for col in columns_to_show if col in display_df.columns]
+
+                display_df_filtered = display_df[existing_columns_to_show]
+                display_df_filtered.insert(0, 'No.', range(1, len(display_df_filtered) + 1))
+                
+                st.dataframe(display_df_filtered, hide_index=True)
             else:
                 st.write("No teams registered for this tournament yet.")
 
