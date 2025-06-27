@@ -42,29 +42,27 @@ try:
             st.info("This event has no tournaments. Please add tournaments in the Admin Dashboard.")
             st.stop()
         
-        tournament_names = {t['name']: {"id": t['id'], "sport": t['sport']} for t in tournaments}
-        selected_tournament_name = st.selectbox("Next, select a Tournament to register teams for:", tournament_names.keys())
+        # --- NEW: Format the tournament names to include the sport for display ---
+        tournament_display_names = {f"{t['name']} ({t['sport']})": {"id": t['id'], "sport": t['sport']} for t in tournaments}
+        selected_tournament_display_name = st.selectbox("Next, select a Tournament to register teams for:", tournament_display_names.keys())
         
-        if selected_tournament_name:
-            selected_tournament_info = tournament_names[selected_tournament_name]
+        if selected_tournament_display_name:
+            selected_tournament_info = tournament_display_names[selected_tournament_display_name]
             selected_tournament_id = selected_tournament_info["id"]
             selected_tournament_sport = selected_tournament_info["sport"]
 
             st.divider()
 
             # Step 3: Register new teams using a conditional form based on the sport
-            st.header(f"Register New Teams for '{selected_tournament_name}'")
+            st.header(f"Register New Teams for '{selected_tournament_display_name}'") # Use the full display name
             st.write("Use the table below to add multiple teams at once. Add new rows using the `+` button at the bottom.")
 
-            # --- NEW CONDITIONAL UI LOGIC ---
-            
-            # If the sport is Captain Ball, show a simpler table
+            # Conditional UI LOGIC
             if selected_tournament_sport == "Captain Ball":
                 initial_teams = pd.DataFrame([ {"Team Name": ""} ])
                 edited_teams = st.data_editor(
                     initial_teams, num_rows="dynamic", key=f"team_editor_cb_{selected_tournament_id}"
                 )
-            # Otherwise, show the full table
             else:
                 initial_teams = pd.DataFrame([
                     {"Team Name": "", "Player 1 Name": "", "Player 2 Name": "", "Reserve Man 1": "", "Reserve Man 2": "", "Reserve Woman 1": ""},
@@ -76,12 +74,9 @@ try:
             if st.button("Register All Teams from Table"):
                 teams_to_insert = []
                 for index, row in edited_teams.iterrows():
-                    # Always require a team name
                     if row["Team Name"]:
-                        # Logic for Captain Ball (only team name)
                         if selected_tournament_sport == "Captain Ball":
                             teams_to_insert.append({ "tournament_id": selected_tournament_id, "team_name": row["Team Name"] })
-                        # Logic for other sports (requires players)
                         elif row["Player 1 Name"] and row["Player 2 Name"]:
                             teams_to_insert.append({
                                 "tournament_id": selected_tournament_id, "team_name": row["Team Name"],
@@ -93,8 +88,9 @@ try:
                 if teams_to_insert:
                     try:
                         supabase.table("teams").insert(teams_to_insert).execute()
-                        st.success(f"Successfully registered {len(teams_to_insert)} new team(s) for '{selected_tournament_name}'!")
+                        st.success(f"Successfully registered {len(teams_to_insert)} new team(s) for '{selected_tournament_display_name}'!")
                         st.balloons()
+                        st.rerun() # Rerun to update the registered teams list immediately
                     except Exception as e:
                         st.error(f"Error registering teams: {e}")
                 else:
