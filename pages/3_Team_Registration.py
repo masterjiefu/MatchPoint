@@ -17,7 +17,6 @@ except Exception as e:
     st.error("Error connecting to database. Please check secrets.")
     st.stop()
 
-# Check if the user is logged in. If not, show a message and stop.
 if not st.session_state.get("logged_in", False):
     st.warning("You must be logged in to access this page.")
     st.info("Please log in using the main 'app' page first.")
@@ -42,44 +41,36 @@ try:
         if not tournaments:
             st.info("This event has no tournaments. Please add tournaments in the Admin Dashboard.")
             st.stop()
-        
-        # This dictionary holds all the info we need
+
         tournament_info_map = {f"{t['name']} ({t['sport']})": {"id": t['id'], "sport": t['sport']} for t in tournaments}
-        
-        # The user selects from the formatted names
         selected_tournament_display_name = st.selectbox("Next, select a Tournament to register teams for:", tournament_info_map.keys())
-        
+
         if selected_tournament_display_name:
-            # We get the correct info using the selected formatted name
             selected_tournament_info = tournament_info_map[selected_tournament_display_name]
             selected_tournament_id = selected_tournament_info["id"]
             selected_tournament_sport = selected_tournament_info["sport"]
 
             st.divider()
 
-            # Step 3: Register new teams using a conditional form based on the sport
+            # Step 3: Register new teams using the new table format
             st.header(f"Register New Teams for '{selected_tournament_display_name}'")
             st.write("Use the table below to add multiple teams at once. Add new rows using the `+` button at the bottom.")
-            
-            # Use a unique key for the data editor based on the tournament ID
+
             editor_key = f"team_editor_{selected_tournament_id}"
 
-            # If the sport is Captain Ball, show a simpler table
             if selected_tournament_sport == "Captain Ball":
                 if editor_key not in st.session_state:
                     st.session_state[editor_key] = pd.DataFrame([ {"Team Name": ""} ])
-                edited_teams = st.data_editor(st.session_state[editor_key], num_rows="dynamic")
-            # Otherwise, show the full table
+                edited_teams = st.data_editor(st.session_state[editor_key], num_rows="dynamic", disabled=["No."])
             else:
                 if editor_key not in st.session_state:
                     st.session_state[editor_key] = pd.DataFrame([
                         {"Team Name": "", "Player 1 Name": "", "Player 2 Name": "", "Reserve Man 1": "", "Reserve Man 2": "", "Reserve Woman 1": ""},
                     ])
-                edited_teams = st.data_editor(st.session_state[editor_key], num_rows="dynamic")
+                edited_teams = st.data_editor(st.session_state[editor_key], num_rows="dynamic", disabled=["No."])
 
 
             if st.button("Register All Teams from Table"):
-                # Update the session state with the latest edits from the user
                 st.session_state[editor_key] = edited_teams
                 teams_to_insert = []
 
@@ -100,14 +91,13 @@ try:
                         supabase.table("teams").insert(teams_to_insert).execute()
                         st.success(f"Successfully registered {len(teams_to_insert)} new team(s) for '{selected_tournament_display_name}'!")
                         st.balloons()
-                        # Clear the editor by resetting its state, then rerun
-                        st.session_state[editor_key] = pd.DataFrame([{"Team Name": ""}]) if selected_tournament_sport == "Captain Ball" else pd.DataFrame([{"Team Name": "", "Player 1 Name": "", "Player 2 Name": "", "Reserve Man 1": "", "Reserve Man 2": "", "Reserve Woman 1": ""}])
+                        del st.session_state[editor_key] # Clear the editor after submission
                         st.rerun() 
                     except Exception as e:
                         st.error(f"Error registering teams: {e}")
                 else:
                     st.warning("No complete teams were entered in the table. Please make sure all required fields are filled.")
-            
+
             st.divider()
 
             # Step 4: Display already registered teams
@@ -115,7 +105,7 @@ try:
             teams_data = supabase.table("teams").select("*").eq("tournament_id", selected_tournament_id).execute().data
             if teams_data:
                 display_df = pd.DataFrame(teams_data)
-                # Add numbering to the display dataframe
+                # Corrected logic to add the 'No.' column
                 display_df.insert(0, 'No.', range(1, len(display_df) + 1))
                 st.dataframe(display_df)
             else:
