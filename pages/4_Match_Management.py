@@ -45,8 +45,12 @@ try:
         else:
             # Fetch all teams for all tournaments in this event just once for efficiency
             all_tournament_ids = [t['id'] for t in tournaments]
-            all_team_data = supabase.table("teams").select("id, team_name").in_("tournament_id", all_tournament_ids).execute().data
-            team_map = {team['id']: team['team_name'] for team in all_team_data}
+            if all_tournament_ids:
+                all_team_data = supabase.table("teams").select("id, team_name").in_("tournament_id", all_tournament_ids).execute().data
+                team_map = {team['id']: team['team_name'] for team in all_team_data}
+            else:
+                team_map = {}
+
 
             for t in tournaments:
                 tournament_id = t['id']
@@ -73,17 +77,16 @@ try:
                     with col3:
                         is_disabled = (tournament_status != 'Locked')
                         if st.button("Generate Matches", key=f"gen_{tournament_id}", disabled=is_disabled):
-                            existing_matches = supabase.table("matches").select("id").eq("tournament_id", tournament_id).execute().data
-                            if existing_matches:
+                            existing_matches = supabase.table("matches").select("id", count='exact').eq("tournament_id", tournament_id).execute()
+                            if existing_matches.count > 0:
                                 st.warning("Matches have already been generated for this tournament.")
                             else:
-                                teams = [team for team in all_team_data if team['id'] in supabase.table("teams").select("id").eq("tournament_id", tournament_id).execute().data]
-                                team_ids = [team['id'] for team in teams]
-
-                                if len(team_ids) < 2:
+                                teams_in_tournament = [team_id for team_id, team_name in team_map.items() if supabase.table("teams").select("id").eq("id", team_id).eq("tournament_id", tournament_id).execute().data]
+                                
+                                if len(teams_in_tournament) < 2:
                                     st.error("Cannot generate matches. At least 2 teams must be registered.")
                                 else:
-                                    match_pairs = list(itertools.combinations(team_ids, 2))
+                                    match_pairs = list(itertools.combinations(teams_in_tournament, 2))
                                     matches_to_insert = []
                                     for pair in match_pairs:
                                         matches_to_insert.append({
@@ -95,20 +98,22 @@ try:
                                     st.success(f"Successfully generated {len(matches_to_insert)} matches!")
                                     st.rerun()
 
-                    # --- UPDATED: DISPLAY MATCH SCHEDULE WITH TEAM NAMES ---
-                    if tournament_status == 'In Progress' or tournament_status == 'Completed':
+                    # --- UPDATED: DISPLAY MATCH SCHEDULE WITH "VS" FORMAT ---
+                    if tournament_status in ['In Progress', 'Completed']:
                         st.markdown("---")
                         st.write("**Match Schedule:**")
                         match_data = supabase.table("matches").select("*").eq("tournament_id", tournament_id).execute().data
                         if match_data:
+                            
                             schedule_df_data = []
                             for match in match_data:
                                 team_a_name = team_map.get(match['team_a_id'], f"ID: {match['team_a_id']}")
                                 team_b_name = team_map.get(match['team_b_id'], f"ID: {match['team_b_id']}")
+                                
+                                # Combine Team A and Team B into a single "Matchup" string
                                 schedule_df_data.append({
                                     "Match ID": match['id'],
-                                    "Team A": team_a_name,
-                                    "Team B": team_b_name,
+                                    "Matchup": f"{team_a_name} VS {team_b_name}",
                                     "Status": match['status']
                                 })
                             
