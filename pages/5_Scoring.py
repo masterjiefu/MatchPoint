@@ -22,7 +22,6 @@ if not st.session_state.get("logged_in", False):
     st.stop()
 
 # --- PAGE LOGIC ---
-# Check if a match has been selected from the other page
 if st.session_state.get("selected_match_id") is None:
     st.warning("Please select a match to score from the 'Match Management' page first.")
     st.stop()
@@ -30,7 +29,6 @@ if st.session_state.get("selected_match_id") is None:
 selected_match_id = st.session_state.selected_match_id
 
 try:
-    # Fetch all data needed for this match in one go
     match_response = supabase.table("matches").select("*, tournaments(*), team_a:teams!matches_team_a_id_fkey(*), team_b:teams!matches_team_b_id_fkey(*)").eq("id", selected_match_id).single().execute()
     match_data = match_response.data
     
@@ -38,7 +36,6 @@ try:
         st.error("Could not find the selected match.")
         st.stop()
 
-    # Extract data for easier use
     tournament_sport = match_data['tournaments']['sport']
     team_a_name = match_data['team_a']['team_name']
     team_b_name = match_data['team_b']['team_name']
@@ -49,22 +46,20 @@ try:
     st.divider()
 
     with st.form("scoring_form"):
-        # --- CONDITIONAL SCORING UI ---
-        
         # UI for Badminton and Pickleball (Set-based)
         if tournament_sport in ["Badminton", "Pickleball"]:
             st.subheader("Set Scores")
             col1, col2 = st.columns(2)
             with col1:
                 st.write(f"**{team_a_name}**")
-                team_a_set1 = st.number_input("Set 1 Score", min_value=0, key="a1", value=match_data.get('team_a_set1_score') or 0)
-                team_a_set2 = st.number_input("Set 2 Score", min_value=0, key="a2", value=match_data.get('team_a_set2_score') or 0)
-                team_a_set3 = st.number_input("Set 3 Score", min_value=0, key="a3", value=match_data.get('team_a_set3_score') or 0)
+                team_a_set1 = st.number_input("Set 1 Score", min_value=0, step=1, key="a1", value=match_data.get('team_a_set1_score') or 0)
+                team_a_set2 = st.number_input("Set 2 Score", min_value=0, step=1, key="a2", value=match_data.get('team_a_set2_score') or 0)
+                team_a_set3 = st.number_input("Set 3 Score", min_value=0, step=1, key="a3", value=match_data.get('team_a_set3_score') or 0)
             with col2:
                 st.write(f"**{team_b_name}**")
-                team_b_set1 = st.number_input("Set 1 Score", min_value=0, key="b1", value=match_data.get('team_b_set1_score') or 0)
-                team_b_set2 = st.number_input("Set 2 Score", min_value=0, key="b2", value=match_data.get('team_b_set2_score') or 0)
-                team_b_set3 = st.number_input("Set 3 Score", min_value=0, key="b3", value=match_data.get('team_b_set3_score') or 0)
+                team_b_set1 = st.number_input("Set 1 Score", min_value=0, step=1, key="b1", value=match_data.get('team_b_set1_score') or 0)
+                team_b_set2 = st.number_input("Set 2 Score", min_value=0, step=1, key="b2", value=match_data.get('team_b_set2_score') or 0)
+                team_b_set3 = st.number_input("Set 3 Score", min_value=0, step=1, key="b3", value=match_data.get('team_b_set3_score') or 0)
         
         # UI for Captain Ball (Accumulation)
         elif tournament_sport == "Captain Ball":
@@ -72,22 +67,31 @@ try:
             col1, col2 = st.columns(2)
             with col1:
                 st.write(f"**{team_a_name}**")
-                team_a_final = st.number_input("Final Score", min_value=0, key="a_final", value=match_data.get('team_a_final_score') or 0)
+                team_a_final = st.number_input("Final Score", min_value=0, step=1, key="a_final", value=match_data.get('team_a_final_score') or 0)
             with col2:
                 st.write(f"**{team_b_name}**")
-                team_b_final = st.number_input("Final Score", min_value=0, key="b_final", value=match_data.get('team_b_final_score') or 0)
+                team_b_final = st.number_input("Final Score", min_value=0, step=1, key="b_final", value=match_data.get('team_b_final_score') or 0)
 
         save_button = st.form_submit_button("Save Final Score")
 
         if save_button:
-            update_data = {"status": "Completed"}
+            # Prepare the data to update in the database
+            update_data = {
+                "status": "Completed",
+                # Also save the player names at the time of the match
+                "team_a_player1_actual": match_data['team_a']['player1_name'],
+                "team_a_player2_actual": match_data['team_a']['player2_name'],
+                "team_b_player1_actual": match_data['team_b']['player1_name'],
+                "team_b_player2_actual": match_data['team_b']['player2_name'],
+            }
             winner_id = None
             
-            # Determine winner and prepare update data based on sport
             if tournament_sport in ["Badminton", "Pickleball"]:
                 team_a_sets_won = (1 if team_a_set1 > team_b_set1 else 0) + (1 if team_a_set2 > team_b_set2 else 0) + (1 if team_a_set3 > team_b_set3 else 0)
-                team_b_sets_won = 3 - team_a_sets_won
-                winner_id = match_data['team_a_id'] if team_a_sets_won > team_b_sets_won else match_data['team_b_id']
+                team_b_sets_won = 3 - team_a_sets_won # Assuming 3 sets always played for simplicity
+                if team_a_sets_won > team_b_sets_won: winner_id = match_data['team_a']['id']
+                else: winner_id = match_data['team_b']['id']
+                
                 update_data.update({
                     "team_a_set1_score": team_a_set1, "team_b_set1_score": team_b_set1,
                     "team_a_set2_score": team_a_set2, "team_b_set2_score": team_b_set2,
@@ -95,16 +99,24 @@ try:
                     "winner_id": winner_id
                 })
             elif tournament_sport == "Captain Ball":
-                winner_id = match_data['team_a_id'] if team_a_final > team_b_final else match_data['team_b_id']
+                if team_a_final > team_b_final: winner_id = match_data['team_a']['id']
+                else: winner_id = match_data['team_b']['id']
                 update_data.update({
                     "team_a_final_score": team_a_final, "team_b_final_score": team_b_final,
                     "winner_id": winner_id
                 })
 
+            # --- NEW ROBUST SAVING LOGIC ---
             try:
-                supabase.table("matches").update(update_data).eq("id", selected_match_id).execute()
-                st.success("Match score saved successfully!")
-                st.balloons()
+                response = supabase.table("matches").update(update_data).eq("id", selected_match_id).execute()
+                # Check if the database response contains data, which indicates success
+                if response.data:
+                    st.success("Match score saved successfully!")
+                    st.balloons()
+                else:
+                    st.error("Data was not saved. The database returned an empty response.")
+                    st.write("Error details:", response)
+
             except Exception as e:
                 st.error(f"Error saving score: {e}")
 
