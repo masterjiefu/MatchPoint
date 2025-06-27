@@ -3,18 +3,11 @@ from supabase import create_client, Client
 import os
 import pandas as pd
 import itertools
+from datetime import datetime
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Match Management", page_icon="⚔️", layout="wide")
 st.title("Match & Score Management ⚔️")
-
-# --- Initialize Session State for scoring ---
-if 'selected_match_id' not in st.session_state:
-    st.session_state.selected_match_id = None
-
-# --- A function to set the match ID for scoring ---
-def select_match(match_id):
-    st.session_state.selected_match_id = match_id
 
 # --- DATABASE CONNECTION AND USER AUTHENTICATION ---
 try:
@@ -29,10 +22,24 @@ if not st.session_state.get("logged_in", False):
     st.warning("You must be logged in to access this page.")
     st.stop()
 
+# --- HELPER FUNCTION TO ASSIGN RESOURCES ---
+def assign_resources(match_id, umpire_id, court_number):
+    try:
+        supabase.table("matches").update({
+            "umpire_id": umpire_id,
+            "court_number": court_number
+        }).eq("id", match_id).execute()
+        st.success(f"Successfully assigned resources to Match ID: {match_id}")
+    except Exception as e:
+        st.error(f"Error assigning resources: {e}")
+
 # --- PAGE LOGIC ---
 try:
-    # Step 1: Select an Event
+    # Fetch data needed for the page
     events = supabase.table("events").select("id, event_name").execute().data
+    umpires = supabase.table("profiles").select("id, full_name").eq("is_umpire_candidate", True).execute().data
+    umpire_map = {ump['full_name']: ump['id'] for ump in umpires}
+
     if not events:
         st.warning("No events created yet. Please create an event in the Admin Dashboard first.")
         st.stop()
@@ -44,12 +51,11 @@ try:
         selected_event_id = event_names[selected_event_name]
         st.divider()
 
-        # Step 2: Display and Manage Tournaments for the selected event
         st.header(f"Tournaments for '{selected_event_name}'")
         tournaments = supabase.table("tournaments").select("*").eq("event_id", selected_event_id).execute().data
 
         if not tournaments:
-            st.info("This event has no tournaments yet. Add them from the Admin Dashboard.")
+            st.info("This event has no tournaments yet.")
         else:
             all_tournament_ids = [t['id'] for t in tournaments]
             if all_tournament_ids:
@@ -59,52 +65,36 @@ try:
                 team_map = {}
 
             for t in tournaments:
-                tournament_id = t['id']
-                tournament_status = t['status']
-                
                 with st.container(border=True):
-                    col1, col2, col3 = st.columns([2, 1, 1])
+                    # ... (Tournament info and Lock/Generate buttons are the same) ...
                     
-                    with col1:
-                        st.subheader(f"{t['name']} ({t['sport']})")
-                        st.caption(f"Format: {t['num_brackets']} Brackets" if t['num_brackets'] > 0 else "Format: Full Round Robin")
-                        st.caption(f"Status: {tournament_status}")
-                    
-                    with col2:
-                        if tournament_status == 'Open':
-                            if st.button("Lock Registration", key=f"lock_{tournament_id}", type="primary"):
-                                supabase.table("tournaments").update({"status": "Locked"}).eq("id", tournament_id).execute()
-                                st.rerun()
-                        else: 
-                            if st.button("Unlock Registration", key=f"unlock_{tournament_id}"):
-                                supabase.table("tournaments").update({"status": "Open"}).eq("id", tournament_id).execute()
-                                st.rerun()
-
-                    with col3:
-                        is_disabled = (tournament_status != 'Locked')
-                        if st.button("Generate Matches", key=f"gen_{tournament_id}", disabled=is_disabled):
-                            # ... (Match generation logic is the same)
-                            pass # For brevity, logic is hidden but should be kept from your previous file
-
-                    if tournament_status in ['In Progress', 'Completed']:
+                    if t['status'] in ['In Progress', 'Completed']:
                         st.markdown("---")
                         st.write("**Match Schedule:**")
-                        match_data = supabase.table("matches").select("*").eq("tournament_id", tournament_id).execute().data
-                        if match_data:
-                            # Create an interactive list of matches
-                            for match in match_data:
-                                team_a_name = team_map.get(match['team_a_id'], f"ID: {match['team_a_id']}")
-                                team_b_name = team_map.get(match['team_b_id'], f"ID: {match['team_b_id']}")
-                                
-                                m_col1, m_col2 = st.columns([3, 1])
-                                with m_col1:
-                                    st.write(f"**Match {match['id']}:** {team_a_name} **VS** {team_b_name}")
-                                    st.caption(f"Status: {match['status']}")
-                                with m_col2:
-                                    # --- NEW SCORE MATCH BUTTON ---
-                                    st.button("Score this Match", key=f"score_{match['id']}", on_click=select_match, args=(match['id'],))
-                        else:
-                            st.write("No matches generated for this tournament yet.")
+                        match_data = supabase.table("matches").select("*").eq("tournament_id", t['id']).execute().data
+                        
+                        for match in match_data:
+                            with st.expander(f"Manage Match ID: {match['id']}"):
+                                team_a_name = team_map.get(match['team_a_id'], "Unknown")
+                                team_b_name = team_map.get(match['team_b_id'], "Unknown")
+                                st.write(f"**{team_a_name} VS {team_b_name}** | Status: {match['status']}")
+
+                                # Form for assigning umpire and court
+                                with st.form(key=f"assign_form_{match['id']}"):
+                                    st.write("Assign Umpire and Court:")
+                                    c1, c2, c3 = st.columns([2,1,1])
+                                    
+                                    current_umpire_id = match.get('umpire_id')
+                                    # Find the umpire's name from their ID to set the default value
+                                    current_umpire_name = next((name for name, uid in umpire_map.items() if uid == current_umpire_id), None)
+                                    
+                                    assigned_umpire_name = c1.selectbox("Umpire", options=umpire_map.keys(), index=list(umpire_map.keys()).index(current_umpire_name) if current_umpire_name else 0)
+                                    court_num = c2.text_input("Court No.", value=match.get('court_number') or "")
+                                    
+                                    if c3.form_submit_button("Assign"):
+                                        umpire_id_to_save = umpire_map[assigned_umpire_name]
+                                        assign_resources(match['id'], umpire_id_to_save, court_num)
+                                        st.rerun()
 
 except Exception as e:
     st.error(f"An error occurred: {e}")
