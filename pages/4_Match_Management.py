@@ -22,7 +22,7 @@ if not st.session_state.get("logged_in", False):
 
 # --- PAGE LOGIC ---
 try:
-    # Step 1: Select an Event and Tournament
+    # Step 1: Select an Event
     events = supabase.table("events").select("id, event_name").execute().data
     if not events:
         st.warning("No events created yet. Please create an event in the Admin Dashboard first.")
@@ -30,31 +30,46 @@ try:
 
     event_names = {e['event_name']: e['id'] for e in events}
     selected_event_name = st.selectbox("Select an Event:", event_names.keys())
-    selected_event_id = event_names[selected_event_name]
+    
+    if selected_event_name:
+        selected_event_id = event_names[selected_event_name]
+        st.divider()
 
-    tournaments = supabase.table("tournaments").select("id, name, sport").eq("event_id", selected_event_id).execute().data
-    if not tournaments:
-        st.info("This event has no tournaments.")
-        st.stop()
+        # Step 2: Display and Manage Tournaments for the selected event
+        st.header(f"Tournaments for '{selected_event_name}'")
+        tournaments = supabase.table("tournaments").select("*").eq("event_id", selected_event_id).execute().data
 
-    tournament_names = {f"{t['name']} ({t['sport']})": t['id'] for t in tournaments}
-    selected_tournament_display_name = st.selectbox("Select a Tournament to Manage:", tournament_names.keys())
-    selected_tournament_id = tournament_names[selected_tournament_display_name]
+        if not tournaments:
+            st.info("This event has no tournaments yet. Add them from the Admin Dashboard.")
+        else:
+            for t in tournaments:
+                tournament_id = t['id']
+                tournament_status = t['status']
+                
+                with st.container(border=True):
+                    col1, col2, col3 = st.columns([2, 1, 1])
+                    
+                    with col1:
+                        st.subheader(f"{t['name']} ({t['sport']})")
+                        st.caption(f"Format: {t['num_brackets']} Brackets" if t['num_brackets'] > 0 else "Format: Full Round Robin")
+                        st.caption(f"Status: {tournament_status}")
+                    
+                    with col2:
+                        # --- Lock/Unlock Logic ---
+                        if tournament_status == 'Open':
+                            if st.button("Lock Registration", key=f"lock_{tournament_id}", type="primary"):
+                                supabase.table("tournaments").update({"status": "Locked"}).eq("id", tournament_id).execute()
+                                st.rerun()
+                        else: # Status is 'Locked'
+                            if st.button("Unlock Registration", key=f"unlock_{tournament_id}"):
+                                supabase.table("tournaments").update({"status": "Open"}).eq("id", tournament_id).execute()
+                                st.rerun()
 
-    st.divider()
-
-    # Step 2: Display registered teams and add a button for match generation
-    st.header(f"Managing: {selected_tournament_display_name}")
-
-    teams_data = supabase.table("teams").select("*").eq("tournament_id", selected_tournament_id).execute().data
-    if teams_data:
-        st.write("Current Registered Teams:")
-        st.dataframe(teams_data)
-
-        st.info("Match generation logic coming in the next step!")
-        # The Generate Matches button will go here
-    else:
-        st.write("No teams have been registered for this tournament yet.")
+                    with col3:
+                        # --- Generate Matches Button (disabled until locked) ---
+                        is_disabled = (tournament_status != 'Locked')
+                        if st.button("Generate Matches", key=f"gen_{tournament_id}", disabled=is_disabled):
+                            st.info("Match generation logic coming soon!")
 
 except Exception as e:
     st.error(f"An error occurred: {e}")
